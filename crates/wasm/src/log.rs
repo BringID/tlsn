@@ -48,7 +48,6 @@ pub(crate) fn init_logging(
     let rx = Arc::new(rx);
 
     let interval = Interval::new(100, move || {
-        let _ = cb.call1(&JsValue::NULL, &JsValue::from_str("Hayo, wassup!"));
         while let Ok(msg) = rx.try_recv() {
             let _ = cb.call1(&JsValue::NULL, &JsValue::from_str(&msg));
         }
