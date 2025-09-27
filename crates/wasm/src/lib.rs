@@ -11,6 +11,7 @@ pub mod prover;
 pub mod tests;
 pub mod types;
 pub mod verifier;
+mod writer;
 
 pub use log::{LoggingConfig, LoggingLevel};
 
@@ -28,8 +29,9 @@ pub use tests::*;
 pub async fn initialize(
     logging_config: Option<LoggingConfig>,
     thread_count: usize,
+    logging_callback: js_sys::Function,
 ) -> Result<(), JsValue> {
-    log::init_logging(logging_config);
+    log::init_logging(logging_config, logging_callback);
 
     JsFuture::from(web_spawn::start_spawner()).await?;
 

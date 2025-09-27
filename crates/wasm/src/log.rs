@@ -1,3 +1,5 @@
+use crossbeam_channel::{unbounded, Sender, Receiver};
+use std::sync::Arc;
 use serde::Deserialize;
 use tracing::{error, Level, Metadata};
 use tracing_subscriber::{
@@ -6,11 +8,20 @@ use tracing_subscriber::{
     layer::SubscriberExt,
     util::SubscriberInitExt,
 };
-use tracing_web::MakeWebConsoleWriter;
+use crate::writer::MakePostMessageWriter;
 use tsify_next::Tsify;
+use gloo_timers::callback::Interval;
+use wasm_bindgen::JsValue;
 
-pub(crate) fn init_logging(config: Option<LoggingConfig>) {
+pub(crate) fn init_logging(
+    config: Option<LoggingConfig>,
+    logging_callback: js_sys::Function
+) {
     let mut config = config.unwrap_or_default();
+
+    // Creating a messaging channel
+    let (tx, rx): (Sender<String>, Receiver<String>) = unbounded();
+    let tx = Arc::new(tx);
 
     // Default is NONE
     let fmt_span = config
@@ -26,12 +37,23 @@ pub(crate) fn init_logging(config: Option<LoggingConfig>) {
         .with_timer(UtcTime::rfc_3339()) // std::time is not available in browsers
         .with_span_events(fmt_span)
         .without_time()
-        .with_writer(MakeWebConsoleWriter::new()); // write events to the console
+        .with_writer(MakePostMessageWriter::new(tx.clone())); // write events to the console
 
     tracing_subscriber::registry()
         .with(FilterFn::new(filter(config.clone())))
         .with(fmt_layer)
         .init();
+
+    let cb = Arc::new(logging_callback);
+    let rx = Arc::new(rx);
+
+    let interval = Interval::new(100, move || {
+        let _ = cb.call1(&JsValue::NULL, &JsValue::from_str("Hayo, wassup!"));
+        while let Ok(msg) = rx.try_recv() {
+            let _ = cb.call1(&JsValue::NULL, &JsValue::from_str(&msg));
+        }
+    });
+    interval.forget();
 
     // https://github.com/rustwasm/console_error_panic_hook
     std::panic::set_hook(Box::new(|info| {
